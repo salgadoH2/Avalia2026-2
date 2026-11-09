@@ -79,9 +79,12 @@ P26-2B-8356-94BE-3650-165C/
    # cole o database_id em wrangler.jsonc
    npx.cmd wrangler d1 migrations apply DB --remote
    ```
-3. **Pages:** Workers & Pages → Create → Pages → Connect to Git → seu fork.
-   - Root directory: `P26-2B-8356-94BE-3650-165C` · Build command: *(vazio)* · Build output: `public`
-   - O binding `DB` vem do `wrangler.jsonc`.
+3. **Pages** (publicado por upload direto com o Wrangler; o binding `DB` vem do `wrangler.jsonc`):
+   ```powershell
+   npx.cmd wrangler pages project create p26-2b-8356-94be-3650-165c --production-branch main
+   npx.cmd wrangler pages deploy --branch main
+   ```
+   Para atualizar o site depois de mudar o código, basta repetir o `pages deploy`.
 4. **Discord:** em <https://discord.com/developers/applications> crie uma Application → OAuth2 → copie Client ID, gere Client Secret e adicione o redirect `https://SEU-PROJETO.pages.dev/api/auth/discord/callback`.
 5. No projeto Pages → Settings → Variables and Secrets: `DISCORD_CLIENT_ID` e `DISCORD_CLIENT_SECRET` (tipo *Secret*). Faça um novo deploy.
 6. Confira `https://SEU-PROJETO.pages.dev/api/status` → `d1Conectado: true` e `discordConfigurado: true`.

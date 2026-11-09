@@ -1,14 +1,13 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "projeto-p26-2b-8356-94be-3650-165c",
+  "name": "p26-2b-8356-94be-3650-165c",
   "compatibility_date": "2026-03-01",
   "pages_build_output_dir": "./public",
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "db-p26-2b-8356-94be-3650-165c",
-      // Cole aqui o database_id mostrado por: npx.cmd wrangler d1 create db-p26-2b-8356-94be-3650-165c
-      "database_id": "COLE-AQUI-O-DATABASE-ID",
+      "database_id": "f29d6ad2-52ef-4c44-b221-755b1ac58cff",
       "migrations_dir": "migrations"
     }
   ]
