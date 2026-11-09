@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "projeto-p26-2b-8356-94be-3650-165c",
+  "compatibility_date": "2026-03-01",
+  "pages_build_output_dir": "./public",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "db-p26-2b-8356-94be-3650-165c",
+      // Cole aqui o database_id mostrado por: npx.cmd wrangler d1 create db-p26-2b-8356-94be-3650-165c
+      "database_id": "COLE-AQUI-O-DATABASE-ID",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

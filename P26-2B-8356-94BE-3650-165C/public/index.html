@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Simulador de Médias</title>
+  <meta name="description" content="Cadastre suas disciplinas, lance suas notas e descubra a nota mínima para passar.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232f5d50'/%3E%3Cpath d='M9 22l5-12 5 12M11 18h6M22 10v12' stroke='%23fff' stroke-width='2.4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/js/app.js"></script>
+</head>
+<body>
+  <header class="topo">
+    <div class="marca">
+      <span class="marca-icone" aria-hidden="true">A+</span>
+      <span>Simulador de Médias</span>
+    </div>
+    <div id="perfil" class="perfil" hidden>
+      <img id="perfil-avatar" class="avatar" alt="" width="36" height="36">
+      <div class="perfil-texto">
+        <strong id="perfil-nome"></strong>
+        <small>ID Discord <span id="perfil-id"></span></small>
+      </div>
+      <button id="btn-sair" class="btn btn-fantasma" type="button">Sair</button>
+    </div>
+  </header>
+
+  <!-- Tela de login -->
+  <main id="tela-login" class="tela-login" hidden>
+    <section class="login-cartao">
+      <h1>Quanto falta para passar?</h1>
+      <p>Cadastre as disciplinas do semestre com os pesos de provas, trabalhos e listas. Conforme você lança as notas, o simulador mostra a média parcial e a nota mínima que precisa tirar no que falta.</p>
+      <a id="btn-login" class="btn btn-discord" href="/api/auth/discord">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M20.3 4.4A19.6 19.6 0 0 0 15.4 3l-.6 1.3a18 18 0 0 0-5.6 0L8.6 3a19.6 19.6 0 0 0-4.9 1.5C.6 9.1-.3 13.6.2 18.1a19.8 19.8 0 0 0 6 3l1.3-2.1a12.8 12.8 0 0 1-2-1l.5-.4a14.1 14.1 0 0 0 12 0l.5.4a12.8 12.8 0 0 1-2 1l1.3 2.1a19.7 19.7 0 0 0 6-3c.5-5.2-.9-9.7-3.5-13.7ZM8.5 15.3c-1.2 0-2.2-1.1-2.2-2.4s1-2.4 2.2-2.4 2.2 1.1 2.2 2.4-1 2.4-2.2 2.4Zm7 0c-1.2 0-2.2-1.1-2.2-2.4s1-2.4 2.2-2.4 2.2 1.1 2.2 2.4-1 2.4-2.2 2.4Z"/></svg>
+        Entrar com Discord
+      </a>
+      <p id="login-aviso" class="aviso" hidden></p>
+    </section>
+  </main>
+
+  <!-- Aplicação -->
+  <main id="tela-app" class="tela-app" hidden>
+    <aside class="lateral">
+      <div class="lateral-topo">
+        <h2>Minha grade</h2>
+        <button id="btn-nova" class="btn btn-primario btn-pequeno" type="button">+ Disciplina</button>
+      </div>
+      <nav id="lista-disciplinas" class="lista-disciplinas" aria-label="Disciplinas"></nav>
+    </aside>
+
+    <section id="detalhe" class="detalhe" aria-live="polite"></section>
+  </main>
+
+  <!-- Editor de disciplina / fórmula -->
+  <dialog id="editor" class="editor">
+    <form id="form-disciplina" method="dialog" novalidate>
+      <header class="editor-topo">
+        <h2 id="editor-titulo">Nova disciplina</h2>
+        <button type="button" class="btn-x" data-fechar aria-label="Fechar">×</button>
+      </header>
+
+      <div class="editor-corpo">
+        <div class="grade-campos">
+          <label class="campo campo-largo">Nome da disciplina
+            <input name="nome" required maxlength="80" placeholder="Ex.: Cálculo II">
+          </label>
+          <label class="campo">Semestre
+            <input name="semestre" required maxlength="20" placeholder="2026.2">
+          </label>
+          <label class="campo">Nota máxima
+            <input name="nota_maxima" inputmode="decimal" value="10">
+          </label>
+          <label class="campo">Aprovação direta (média ≥)
+            <input name="media_aprovacao" inputmode="decimal" value="7">
+          </label>
+          <label class="campo">Vai para exame (média ≥)
+            <input name="media_minima_exame" inputmode="decimal" value="4">
+          </label>
+          <label class="campo">Média final pós-exame (≥)
+            <input name="media_final_exame" inputmode="decimal" value="5">
+            <small>Calculada como (média + exame) ÷ 2</small>
+          </label>
+        </div>
+
+        <h3 class="editor-sub">Fórmula da média <small>média ponderada pelos pesos</small></h3>
+        <div class="avaliacoes-cabecalho" aria-hidden="true">
+          <span>Avaliação</span><span>Tipo</span><span>Peso</span><span>% da média</span><span></span>
+        </div>
+        <div id="editor-avaliacoes" class="editor-avaliacoes"></div>
+        <div class="editor-acoes-add">
+          <button type="button" class="btn btn-secundario btn-pequeno" data-add="prova">+ Prova</button>
+          <button type="button" class="btn btn-secundario btn-pequeno" data-add="trabalho">+ Trabalho</button>
+          <button type="button" class="btn btn-secundario btn-pequeno" data-add="lista">+ Lista</button>
+        </div>
+        <div id="editor-distribuicao" class="distribuicao"></div>
+        <p id="editor-erro" class="erro" role="alert" hidden></p>
+      </div>
+
+      <footer class="editor-rodape">
+        <button type="button" class="btn btn-fantasma" data-fechar>Cancelar</button>
+        <button type="submit" class="btn btn-primario" id="btn-salvar-disciplina">Salvar</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <footer class="rodape">
+    Chave Única: <code>P26-2B-8356-94BE-3650-165C</code> · HTML5, CSS3 e JavaScript puro · Cloudflare Pages Functions + D1 · Login Discord
+  </footer>
+</body>
+</html>

@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Testes do cálculo</title>
+  <style>body{font-family:ui-monospace,Consolas,monospace;padding:1rem;white-space:pre-wrap}</style>
+</head>
+<body>
+<div id="saida"></div>
+<script type="module">
+  import { executar } from "./calc.test.mjs";
+  const saida = document.getElementById("saida");
+  const falhas = executar((linha) => (saida.textContent += linha + "\n"));
+  document.title = falhas ? `FALHOU (${falhas})` : "OK";
+</script>
+</body>
+</html>
