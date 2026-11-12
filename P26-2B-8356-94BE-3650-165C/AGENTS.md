@@ -2,58 +2,121 @@
 
 ## 1. Harness utilizado
 
-- **Harness:** Claude Code (aplicativo desktop Claude, aba Code, Windows 11), com ferramentas de leitura/escrita de arquivos, terminal (PowerShell/Git Bash), navegador embutido para pré-visualização e criação de subagentes.
+- **Harness:** Claude Code (aplicativo desktop Claude, aba Code, Windows 11). Ferramentas: leitura/escrita de arquivos, terminal (PowerShell e Git Bash), navegador embutido (testes visuais e de console) e criação de **subagentes**.
 - **Modelo base:** Claude Opus 5.5 (`claude-opus-5-5`) em todos os agentes.
-- **Coordenação:** um agente orquestrador (sessão principal) atuou em dois papéis especializados — backend e interface — cada um guiado por sua skill; o agente de teste e validação rodou como **subagente separado, com contexto próprio e somente leitura**, para não "confirmar" o próprio trabalho. Os achados dele voltaram ao orquestrador, que aplicou as correções e reexecutou os testes.
+- **Ambiente de execução dos agentes:** Node.js 26 via Scoop (modo usuário), Wrangler 4 (`wrangler pages dev` + D1 local) para testes reais da API.
 
+### Como os agentes foram coordenados
+Um **orquestrador** (sessão principal do Claude Code) planejou o trabalho, escreveu as skills e disparou cada especialista como **subagente independente**: processo separado, contexto próprio, com acesso apenas à pasta do projeto e à sua skill. Cada agente recebeu uma **lista fechada de arquivos que podia alterar** — assim agentes rodando em paralelo nunca editaram o mesmo arquivo — e **contratos de interface** fixados antes (ex.: formato de `simular()`, `resumoSemestre()`, `GET /api/conta/exportar`), para que pudessem trabalhar ao mesmo tempo sem esperar uns pelos outros. Os agentes de teste e de segurança **não podiam alterar o código do app**: só reportar, para não "aprovar o próprio trabalho".
+
+```mermaid
+flowchart LR
+  O[Orquestrador<br/>Claude Code] -->|fase 1, em paralelo| A1[1 · Backend]
+  O --> A2[2 · Interface]
+  O --> A3[3 · Domínio e cálculo]
+  O --> A4[4 · Segurança]
+  A1 & A2 & A3 & A4 -->|relatórios| O
+  O -->|fase 2| A5[5 · Teste e validação]
+  A5 -->|defeitos| O
+  O -->|correções| O
+  O -->|fase 3| A6[6 · Documentação]
+  A6 -->|relatório| O
 ```
-Orquestrador (Claude Code)
- ├── Agente 1 — Backend serverless  ── skills/serverless-d1-discord
- ├── Agente 2 — Interface vanilla   ── skills/vanilla-dom-ui
- └── Agente 3 — Teste e validação   ── skills/teste-validacao   (subagente isolado, read-only)
-        └─ relatório → correções pelos Agentes 1/2 → testes reexecutados (14/14)
-```
+
+| Fase | Agentes | Modo |
+|---|---|---|
+| 0 (versão inicial) | Orquestrador + Agente de validação inicial | sequencial |
+| 1 | Backend, Interface, Domínio, Segurança | **paralelo**, arquivos disjuntos |
+| 2 | Teste e Validação | independente, somente leitura do app |
+| 3 | Documentação | independente |
 
 ---
 
 ## 2. Agentes
 
-### Agente 1: Arquiteto Serverless, Cloudflare D1 e Discord OAuth2
-- **Papel:** modelagem do banco D1, fluxo OAuth2 do Discord, sessões e regras de negócio no servidor.
-- **Skill:** [`skills/serverless-d1-discord/SKILL.md`](./skills/serverless-d1-discord/SKILL.md)
+### Agente 1: Backend Serverless (Pages Functions + D1 + Discord OAuth2)
+- **Skills:** [`skills/serverless-d1-discord/SKILL.md`](./skills/serverless-d1-discord/SKILL.md), [`skills/seguranca-web/SKILL.md`](./skills/seguranca-web/SKILL.md)
+- **Podia alterar:** `functions/**`, `lib/**`, novas migrações.
 - **Entregas:**
-  - `migrations/0001_init.sql` — tabelas `usuarios`, `sessoes`, `disciplinas`, `avaliacoes` com chaves estrangeiras, `ON DELETE CASCADE` e `CHECK` de faixas.
-  - `functions/api/auth/*` — login Discord com `state` anti-CSRF, importação de `user_id`, nome e avatar, sessão com token de 256 bits (só o hash SHA-256 no banco).
-  - `functions/api/disciplinas/*`, `functions/api/avaliacoes/[id].js` — CRUD sempre filtrado pelo usuário da sessão.
-  - `lib/validacao.js` — validação de todas as entradas (notas, pesos, tipos, coerência das médias, limites).
-  - Reuso de `public/js/calc.js` no servidor para devolver o resumo com a mesma regra do cliente.
+  - LGPD: `GET /api/conta/exportar` (download JSON) e `DELETE /api/conta` (exige `{"confirmar":"EXCLUIR"}`, apaga tudo numa transação `batch`).
+  - `functions/api/_middleware.js`: `no-store` + `nosniff` em toda resposta da API e **403 para escrita vinda de outra origem** (defesa extra contra CSRF).
+  - `functions/api/[[rota]].js`: 404 em JSON para rota inexistente (antes caía no `index.html`).
+  - 405 com cabeçalho `Allow` em todas as rotas; `lerJson` recusa >20 000 bytes pelo `Content-Length` (413) e corpo chunked; limite de 40 disciplinas checado **no mesmo INSERT** (sem condição de corrida); `PATCH` de nota filtrado também por `user_id`.
+  - `migrations/0002_indice_expiracao_sessoes.sql`: índice para a limpeza de sessões vencidas.
+- **Verificação:** >70 checagens com `curl` contra `wrangler pages dev` + D1 local, com 3 usuários de teste (401, 400, 413, 415, IDOR → 404, 405, 403, exportar, excluir conta).
 
-### Agente 2: Especialista em Interface Web Vanilla (HTML5, CSS3 e DOM)
-- **Papel:** interface responsiva e acessível sem frameworks, cálculo instantâneo e salvamento automático.
+### Agente 2: Interface Web Vanilla (HTML5, CSS3, DOM)
 - **Skill:** [`skills/vanilla-dom-ui/SKILL.md`](./skills/vanilla-dom-ui/SKILL.md)
+- **Podia alterar:** `public/index.html`, `public/styles.css`, `public/js/app.js`, `public/js/ui/*`.
 - **Entregas:**
-  - `public/js/calc.js` — motor da média ponderada e da nota mínima necessária (aprovação direta, evitar reprovação, exame final).
-  - `public/js/app.js` — DOM montado com `createElement`/`textContent` (sem `innerHTML`), recálculo a cada tecla, salvamento com debounce, editor da fórmula em `<dialog>`.
-  - `public/styles.css` — layout em grid, modo claro/escuro, versões para celular.
-  - Cabeçalho com avatar, nome e ID do Discord; rodapé com a Chave Única.
-  - Verificação visual no navegador embutido (desktop 800 px e celular 375 px) com API simulada.
+  - **Visão geral do semestre** (aprovados, em andamento, exame, reprovados, média geral, % avaliado) com seletor de semestre e rotas `#/visao-geral` / `#/disciplina/:id`.
+  - **Modo simulação "E se…?"**: notas hipotéticas sem salvar (nenhuma requisição ao servidor), "preencher com a mínima".
+  - **Menu da conta** acessível por teclado: baixar dados, sair, excluir conta com confirmação forte.
+  - Telas de carregamento/erro com "tentar novamente", primeiros passos com modelo de fórmula, diálogos nativos com foco preso e devolvido, link "pular para o conteúdo", `prefers-reduced-motion`, **boletim para impressão**.
+  - Código organizado em módulos: `ui/dom.js`, `api.js`, `dialogos.js`, `conta.js`, `semestre.js`, `situacao.js`.
+- **Verificação:** navegador embutido contra servidor local real, em 375/768/1280 px, tema claro e escuro, **0 falhas de contraste AA** (script automático), sem rolagem horizontal, console sem erros.
 
-### Agente 3: Agente de Teste, Auditoria de Segurança e Validação (obrigatório)
-- **Papel:** verificação independente — executado como subagente separado do Claude Code, **sem permissão de editar**, com a instrução de auditar autorização, OAuth/sessão, XSS, validação no servidor, uso da API do D1/Pages, matemática e rubrica.
+### Agente 3: Domínio Acadêmico e Motor de Cálculo
+- **Skill:** [`skills/dominio-calculo/SKILL.md`](./skills/dominio-calculo/SKILL.md)
+- **Podia alterar:** `public/js/calc.js`, `tests/calc.test.mjs`, `tests/index.html`.
+- **Entregas:**
+  - Funções novas `simular(d, notas)` e `resumoSemestre(disciplinas)`.
+  - **6 bugs corrigidos**, entre eles: média exibida "7,00" com situação "exame" (média real 6,9967) — agora médias exibidas são truncadas (`floor2`) e notas mínimas arredondadas para cima (`ceil2`), então o número na tela sempre é coerente com a situação; `round2(1.005)` dando 1; nota "só espaços" contada como zero; peso inválido contaminando as somas.
+  - Testes de **14 → 52**, incluindo **testes de propriedade** com 600 disciplinas aleatórias (semente fixa): a nota mínima mostrada sempre basta e 0,01 a menos nunca basta.
+- **Verificação:** `node tests/calc.test.mjs` → 52/52. Para provar que os testes detectam erros, introduziu **mutações** de propósito numa cópia (trocar `ceil2`/`floor2` por arredondamento comum): cada mutação derrubou 8 testes.
+
+### Agente 4: Segurança de Aplicações Web
+- **Skill:** [`skills/seguranca-web/SKILL.md`](./skills/seguranca-web/SKILL.md)
+- **Podia alterar:** só `public/_headers` e `docs/SEGURANCA.md` (auditor, não corrige código alheio).
+- **Entregas:**
+  - `public/_headers`: **CSP** restritiva (`script-src 'self'`, sem `unsafe-inline`), HSTS, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`, COOP.
+  - [`docs/SEGURANCA.md`](./docs/SEGURANCA.md): modelo de ameaças, controles com referência a arquivo e linha, achados.
+- **Verificação:** CSP validada no navegador embutido (nenhuma violação do app) e **contraprova** — script e estilo inline injetados de propósito foram bloqueados. IDOR e CSRF testados com duas sessões.
+- **Achados:** nenhum crítico/alto (sem SQL injection, XSS, IDOR ou CSRF explorável). 9 médios/baixos — corrigidos pelo orquestrador: sessão expira após **7 dias sem uso** (janela deslizante), nome do Discord passa pela limpeza de caracteres de controle/bidi, mensagens públicas de erro sem nomes de variáveis, aviso de privacidade (LGPD) na tela de login, `.gitignore` ampliado.
+
+### Agente 5: Teste e Validação (obrigatório)
 - **Skill:** [`skills/teste-validacao/SKILL.md`](./skills/teste-validacao/SKILL.md)
-- **Resultado da auditoria** (nenhum problema crítico ou alto):
+- **Podia alterar:** só `tests/**`. Não corrigia o app — reportava defeitos com passos para reproduzir.
+- **Entregas:**
+  - [`tests/api.test.mjs`](./tests/api.test.mjs): **suíte de integração automática, sem dependências**, que sozinha cria um D1 local temporário, aplica as migrações, cria 2 usuários e 5 sessões, sobe `wrangler pages dev`, roda os casos e derruba o servidor. Cobre 401/400/413/415, cada regra de validação, **IDOR entre dois alunos**, fluxo completo (resumo do servidor = `calc.js` = conta à mão), 403 de origem cruzada, 404/405, exportação, exclusão de conta e cabeçalhos de segurança; ao final confere no SQLite que não sobrou nenhuma linha órfã.
+  - Teste **ponta a ponta** no navegador: do primeiro acesso à exclusão da conta, nota mínima conferida à mão em 4 cenários, simulação sem nenhum `PATCH` enviado, foco de teclado nos diálogos, 375 px e desktop, claro e escuro, sem violações de CSP.
+  - [`tests/README.md`](./tests/README.md).
+- **Defeitos encontrados (todos corrigidos pelo orquestrador e cobertos por teste quando aplicável):**
 
-| # | Achado | Gravidade | Correção aplicada |
+| # | Gravidade | Defeito | Correção |
 |---|---|---|---|
-| 1 | `database_id` de exemplo no `wrangler.jsonc` | Média | Documentado: preencher após `wrangler d1 create` |
-| 2 | Faltava `.gitignore` — risco de commitar `.dev.vars` com o segredo do Discord | Média | `.gitignore` criado |
-| 3 | Validação arredondava depois de checar a faixa (peso 0,001 virava 0 e gerava erro 500) | Baixa | Arredonda antes de validar → 400 |
-| 4 | Strings como `""` ou `"0x10"` eram convertidas em número | Baixa | Aceita só número ou texto decimal |
-| 5 | Corpo JSON não-objeto no PATCH gerava 500 | Baixa | Checagem de tipo → 400 |
-| 6 | Cookie malformado (`%E0`) gerava 500 | Baixa | `try/catch` → tratado como sem sessão |
-| 7 | Classificação usava média arredondada (6,995 → aprovado) e a nota mínima não | Baixa | Classificação usa a média exata + novo teste |
-| 8 | Editar a fórmula numa aba antiga podia sobrescrever notas mais novas | Baixa | `PUT` não altera mais notas existentes |
+| 1 | Média | Botão "E se…?" não acompanhava as notas digitadas (simulação vazia ou bloqueada) | Estado do botão atualizado a cada nota; foco seguro ao sair |
+| 2 | Baixa | `aria-labelledby` quebrado quando o semestre tem espaço | IDs gerados por índice |
+| 3 | Baixa | `HEAD` respondia 405 (monitores veriam o site fora do ar) | `onRequestHead` em toda rota GET + `Allow` com HEAD; **novo caso de teste** |
+| 4 | Baixa | Confirmação "EXCLUIR" em minúsculas não dava nenhum aviso | Mensagem de erro clara no diálogo |
+| — | Info | Nota −0,001 gravada como −0 | Normalizada para 0 |
 
-- **Confirmado pela auditoria:** todas as consultas filtradas por `user_id`; SQL sempre parametrizado; `state` do OAuth conferido; cookies `HttpOnly`/`SameSite=Lax`/`Secure`; nenhum `innerHTML`; chave no rodapé; nenhum framework.
-- **Testes automatizados:** `tests/calc.test.mjs` — **14/14 passando** após as correções (executados no navegador por `tests/index.html`; no laboratório: `node tests/calc.test.mjs`).
-- **Pendente para o estudante após o deploy:** testes de API com `curl` descritos na skill e `node validar-local.mjs P26-2B-8356-94BE-3650-165C`.
+### Agente 6: Documentação Técnica
+- **Skill:** [`skills/documentacao-tecnica/SKILL.md`](./skills/documentacao-tecnica/SKILL.md)
+- **Podia alterar:** `README.md`, `docs/ARQUITETURA.md`.
+- **Entregas:** README reestruturado (mantendo o cabeçalho oficial intacto) e [`docs/ARQUITETURA.md`](./docs/ARQUITETURA.md) com diagramas Mermaid de componentes, sequência (login e lançamento de nota) e modelo de dados, tabela de rotas e decisões de projeto. Conferiu cada afirmação lendo o código e rodando as suítes.
+
+### Fase 0: versão inicial e primeira validação
+Antes das fases acima, o orquestrador construiu a primeira versão do sistema e um **agente de validação inicial** (subagente somente leitura) a auditou: nenhum problema crítico; 8 achados (`.gitignore` ausente, arredondamento antes da validação, cookie malformado gerando 500, edição de fórmula sobrescrevendo notas, entre outros), todos corrigidos naquela rodada.
+
+---
+
+## 3. Resultado consolidado
+
+| Verificação | Resultado |
+|---|---|
+| `node tests/calc.test.mjs` | **52/52** |
+| `node tests/api.test.mjs` (servidor + D1 locais reais) | **30/30** |
+| `node validar-local.mjs P26-2B-8356-94BE-3650-165C` | 9/9 itens |
+| Falhas críticas/altas de segurança | **0** |
+
+## 4. Skills (pasta `skills/`)
+
+| Skill | Usada por |
+|---|---|
+| `serverless-d1-discord` | Agente 1 |
+| `vanilla-dom-ui` | Agente 2 |
+| `dominio-calculo` | Agente 3 |
+| `seguranca-web` | Agentes 1 e 4 |
+| `teste-validacao` | Agente 5 e agente de validação inicial |
+| `documentacao-tecnica` | Agente 6 |

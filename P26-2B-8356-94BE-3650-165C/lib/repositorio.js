@@ -40,19 +40,22 @@ export async function obterDisciplina(env, userId, id) {
 }
 
 export async function criarDisciplina(env, userId, d) {
-  const total = await env.DB.prepare("SELECT COUNT(*) AS n FROM disciplinas WHERE user_id = ?").bind(userId).first("n");
-  if (total >= LIMITE_DISCIPLINAS) throw new HttpError(409, `Limite de ${LIMITE_DISCIPLINAS} disciplinas atingido.`);
-
+  // Contagem e inserção na MESMA instrução: duas abas criando ao mesmo tempo não furam o limite.
   const ins = await env.DB.prepare(
     `INSERT INTO disciplinas (user_id, nome, semestre, nota_maxima, media_aprovacao, media_minima_exame, media_final_exame)
-     VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`
-  ).bind(userId, d.nome, d.semestre, d.nota_maxima, d.media_aprovacao, d.media_minima_exame, d.media_final_exame).first();
+     SELECT ?, ?, ?, ?, ?, ?, ?
+      WHERE (SELECT COUNT(*) FROM disciplinas WHERE user_id = ?) < ?
+     RETURNING id`
+  ).bind(userId, d.nome, d.semestre, d.nota_maxima, d.media_aprovacao, d.media_minima_exame, d.media_final_exame,
+    userId, LIMITE_DISCIPLINAS).first();
+  if (!ins) throw new HttpError(409, `Limite de ${LIMITE_DISCIPLINAS} disciplinas atingido. Exclua uma para cadastrar outra.`);
   const id = ins.id;
 
   try {
     await env.DB.batch(d.avaliacoes.map((a) => inserirAvaliacao(env, id, a)));
   } catch (e) {
-    await env.DB.prepare("DELETE FROM disciplinas WHERE id = ?").bind(id).run();
+    // Compensação: sem avaliações a disciplina não é válida; desfaz a inserção.
+    await env.DB.prepare("DELETE FROM disciplinas WHERE id = ? AND user_id = ?").bind(id, userId).run();
     throw e;
   }
   return obterDisciplina(env, userId, id);
@@ -121,9 +124,47 @@ export async function buscarAvaliacaoDoUsuario(env, userId, avaliacaoId) {
   return row;
 }
 
-export async function salvarNota(env, avaliacaoId, disciplinaId, nota) {
+export async function salvarNota(env, userId, avaliacaoId, disciplinaId, nota) {
+  // Filtros redundantes de propósito (defesa em profundidade): mesmo que o chamador erre,
+  // a escrita só atinge linhas do próprio usuário.
   await env.DB.batch([
-    env.DB.prepare("UPDATE avaliacoes SET nota = ?, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?").bind(nota, avaliacaoId),
-    env.DB.prepare("UPDATE disciplinas SET atualizado_em = CURRENT_TIMESTAMP WHERE id = ?").bind(disciplinaId),
+    env.DB.prepare(
+      `UPDATE avaliacoes SET nota = ?, atualizado_em = CURRENT_TIMESTAMP
+        WHERE id = ? AND disciplina_id = (SELECT id FROM disciplinas WHERE id = ? AND user_id = ?)`
+    ).bind(nota, avaliacaoId, disciplinaId, userId),
+    env.DB.prepare("UPDATE disciplinas SET atualizado_em = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?").bind(disciplinaId, userId),
   ]);
+}
+
+/* ---------- Conta (LGPD) ---------- */
+
+/** Dados cadastrais do usuário, como gravados a partir do Discord. */
+export async function obterUsuario(env, userId) {
+  const u = await env.DB.prepare(
+    "SELECT user_id, username, avatar_url, criado_em FROM usuarios WHERE user_id = ?"
+  ).bind(userId).first();
+  if (!u) throw new HttpError(404, "Usuário não encontrado.");
+  return u;
+}
+
+/** Portabilidade (LGPD art. 18, V): tudo o que o sistema guarda sobre o aluno. */
+export async function exportarDados(env, userId) {
+  const [usuario, disciplinas] = await Promise.all([obterUsuario(env, userId), listarDisciplinas(env, userId)]);
+  return { exportado_em: new Date().toISOString(), usuario, disciplinas };
+}
+
+/**
+ * Eliminação (LGPD art. 18, VI): apaga avaliações, disciplinas, sessões e o usuário
+ * numa única transação (batch do D1). Não depende do ON DELETE CASCADE — cada tabela
+ * é limpa explicitamente, na ordem filha → pai.
+ */
+export async function excluirConta(env, userId) {
+  const r = await env.DB.batch([
+    env.DB.prepare("DELETE FROM avaliacoes WHERE disciplina_id IN (SELECT id FROM disciplinas WHERE user_id = ?)").bind(userId),
+    env.DB.prepare("DELETE FROM disciplinas WHERE user_id = ?").bind(userId),
+    env.DB.prepare("DELETE FROM sessoes WHERE user_id = ?").bind(userId),
+    env.DB.prepare("DELETE FROM usuarios WHERE user_id = ?").bind(userId),
+  ]);
+  const [avaliacoes, disciplinas, sessoes, usuarios] = r.map((x) => x.meta?.changes ?? 0);
+  return { avaliacoes, disciplinas, sessoes, usuarios };
 }

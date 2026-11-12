@@ -3,8 +3,9 @@
  *   GET    — uma disciplina do aluno
  *   PUT    — altera regras/fórmula (avaliações com id são mantidas com suas notas)
  *   DELETE — remove a disciplina e suas avaliações
+ * Disciplina de outro usuário responde 404 (não revela que existe).
  */
-import { json, lerJson, rota } from "../../../lib/http.js";
+import { json, lerJson, metodoNaoPermitido, rota } from "../../../lib/http.js";
 import { exigirUsuario } from "../../../lib/session.js";
 import { validarDisciplina, validarId } from "../../../lib/validacao.js";
 import { atualizarDisciplina, excluirDisciplina, obterDisciplina } from "../../../lib/repositorio.js";
@@ -26,3 +27,7 @@ export const onRequestDelete = rota(async ({ request, env, params }) => {
   await excluirDisciplina(env, u.user_id, validarId(params.id));
   return json({ ok: true });
 });
+
+// HEAD: mesma resposta do GET; o _middleware remove o corpo.
+export const onRequestHead = onRequestGet;
+export const onRequest = metodoNaoPermitido("GET", "PUT", "DELETE");

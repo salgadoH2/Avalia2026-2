@@ -19,7 +19,19 @@ Ou abra `tests/index.html` servido localmente. Todos os casos devem passar (méd
 - `state` do OAuth conferido no callback; cookies `HttpOnly; Secure; SameSite=Lax`.
 - Nenhum `innerHTML` com dado do usuário em `public/js/app.js`.
 
-## 3. Testes de API anti-manipulação (com cookie de uma sessão real)
+## 3. Testes de integração da API (ambiente local real, sem Discord)
+Rodar as Functions e um D1 local de verdade com o Wrangler e criar sessões de teste direto no banco local:
+```powershell
+# O D1 local falha ("internal error") em caminhos com acento/OneDrive: persista fora da pasta do projeto.
+npx.cmd wrangler d1 migrations apply DB --local --persist-to $env:TEMP\avalia-d1-testes
+npx.cmd wrangler pages dev --port 8792 --persist-to $env:TEMP\avalia-d1-testes
+```
+- Sessão de teste: gerar um token de 64 hex, gravar em `usuarios` e em `sessoes` o **SHA-256** do token (`wrangler d1 execute DB --local --persist-to ... --command "INSERT ..."`), e enviar `Cookie: sid=<token>`.
+- Criar **dois** usuários (A e B) para testar acesso cruzado (IDOR).
+- A suíte `tests/api.test.mjs` cobre: 401 sem sessão, 415 sem JSON, 400 para cada regra de validação, 404 em recurso de outro usuário, fluxo completo (criar → lançar notas → resumo do servidor → editar fórmula → excluir), exportação e exclusão de conta.
+- Nunca usar `--remote` nem a URL de produção nos testes automáticos.
+
+Exemplos manuais equivalentes:
 ```bash
 # nota acima do máximo → 400
 curl -X PATCH https://SEU-PROJETO.pages.dev/api/avaliacoes/1 -H "Content-Type: application/json" -H "Cookie: sid=..." -d '{"nota": 11}'

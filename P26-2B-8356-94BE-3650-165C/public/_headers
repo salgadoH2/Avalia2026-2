@@ -1,0 +1,17 @@
+# Cabeçalhos de segurança do Cloudflare Pages (aplicados aos arquivos estáticos de public/).
+# Atenção: o Cloudflare Pages NÃO aplica este arquivo às respostas geradas por Pages Functions
+# (functions/api/**). Os cabeçalhos da API são definidos no código (lib/http.js); o bloco /api/*
+# abaixo cobre apenas o que o Pages servir como estático nesse caminho (ex.: rotas inexistentes).
+# Não repetir o mesmo cabeçalho em dois blocos que casam com a mesma URL: o Pages junta os valores com vírgula.
+
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://cdn.discordapp.com; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self' https://discord.com; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  Cross-Origin-Opener-Policy: same-origin
+
+/api/*
+  Cache-Control: no-store

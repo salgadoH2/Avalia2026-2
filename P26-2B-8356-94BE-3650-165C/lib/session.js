@@ -6,7 +6,8 @@
 import { HttpError } from "./http.js";
 
 export const COOKIE_SESSAO = "sid";
-const DURACAO_SEG = 60 * 60 * 24 * 30; // 30 dias
+const DURACAO_SEG = 60 * 60 * 24 * 30;   // vida máxima do cookie: 30 dias
+const INATIVIDADE_SEG = 60 * 60 * 24 * 7; // no servidor, a sessão expira após 7 dias sem uso
 
 export function lerCookie(request, nome) {
   const header = request.headers.get("Cookie") || "";
@@ -26,7 +27,19 @@ export function lerCookie(request, nome) {
 
 export function cookie(nome, valor, maxAge, request) {
   const seguro = new URL(request.url).protocol === "https:" ? "; Secure" : "";
-  return `${nome}=${encodeURIComponent(valor)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${seguro}`;
+  // Expires no passado reforça a remoção em navegadores antigos que ignoram Max-Age=0.
+  const expira = maxAge <= 0 ? "; Expires=Thu, 01 Jan 1970 00:00:00 GMT" : "";
+  return `${nome}=${encodeURIComponent(valor)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${expira}${seguro}`;
+}
+
+/** Cookie que apaga a sessão no navegador. */
+export function cookieSessaoExpirado(request) {
+  return cookie(COOKIE_SESSAO, "", 0, request);
+}
+
+function tokenDoCookie(request) {
+  const token = lerCookie(request, COOKIE_SESSAO);
+  return token && /^[0-9a-f]{64}$/.test(token) ? token : null;
 }
 
 export function tokenAleatorio(bytes = 32) {
@@ -45,21 +58,29 @@ export async function criarSessao(env, userId, request) {
   await env.DB.batch([
     env.DB.prepare("DELETE FROM sessoes WHERE expira_em < ?").bind(agora),
     env.DB.prepare("INSERT INTO sessoes (token_hash, user_id, expira_em) VALUES (?, ?, ?)")
-      .bind(await sha256(token), userId, agora + DURACAO_SEG),
+      .bind(await sha256(token), userId, agora + INATIVIDADE_SEG),
   ]);
   return cookie(COOKIE_SESSAO, token, DURACAO_SEG, request);
 }
 
 /** Retorna o usuário logado ou null. */
 export async function usuarioDaSessao(env, request) {
-  const token = lerCookie(request, COOKIE_SESSAO);
-  if (!token || !/^[0-9a-f]{64}$/.test(token)) return null;
+  const token = tokenDoCookie(request);
+  if (!token) return null;
+  const hash = await sha256(token);
+  const agora = Math.floor(Date.now() / 1000);
   const row = await env.DB.prepare(
-    `SELECT u.user_id, u.username, u.avatar_url
+    `SELECT u.user_id, u.username, u.avatar_url, s.expira_em
        FROM sessoes s JOIN usuarios u ON u.user_id = s.user_id
       WHERE s.token_hash = ? AND s.expira_em > ?`
-  ).bind(await sha256(token), Math.floor(Date.now() / 1000)).first();
-  return row || null;
+  ).bind(hash, agora).first();
+  if (!row) return null;
+  // Expiração por inatividade (janela deslizante): renova no máximo 1x por dia.
+  if (row.expira_em - agora < INATIVIDADE_SEG - 86400) {
+    await env.DB.prepare("UPDATE sessoes SET expira_em = ? WHERE token_hash = ?").bind(agora + INATIVIDADE_SEG, hash).run();
+  }
+  const { expira_em, ...usuario } = row;
+  return usuario;
 }
 
 /** Igual a usuarioDaSessao, mas lança 401 se não houver login. */
@@ -69,10 +90,11 @@ export async function exigirUsuario(env, request) {
   return u;
 }
 
+/** Apaga a sessão atual no D1 (logout real, não só no navegador) e devolve o cookie expirado. */
 export async function encerrarSessao(env, request) {
-  const token = lerCookie(request, COOKIE_SESSAO);
-  if (token && /^[0-9a-f]{64}$/.test(token)) {
+  const token = tokenDoCookie(request);
+  if (token) {
     await env.DB.prepare("DELETE FROM sessoes WHERE token_hash = ?").bind(await sha256(token)).run();
   }
-  return cookie(COOKIE_SESSAO, "", 0, request);
+  return cookieSessaoExpirado(request);
 }

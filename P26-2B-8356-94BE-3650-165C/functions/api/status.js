@@ -1,11 +1,15 @@
-/** GET /api/status — diagnóstico: D1 vinculado e Discord OAuth2 configurado. */
-import { CHAVE, json } from "../../lib/http.js";
+/** GET /api/status — diagnóstico público: D1 vinculado/migrado e Discord OAuth2 configurado. */
+import { CHAVE, json, metodoNaoPermitido } from "../../lib/http.js";
 
 export async function onRequestGet({ env }) {
   let d1 = false;
   if (env.DB) {
     try {
-      await env.DB.prepare("SELECT COUNT(*) AS n FROM disciplinas").first();
+      // Só compila se as quatro tabelas existirem; LIMIT 1 evita varrer as tabelas.
+      await env.DB.prepare(
+        `SELECT (SELECT 1 FROM usuarios LIMIT 1) AS u, (SELECT 1 FROM sessoes LIMIT 1) AS s,
+                (SELECT 1 FROM disciplinas LIMIT 1) AS d, (SELECT 1 FROM avaliacoes LIMIT 1) AS a`
+      ).first();
       d1 = true;
     } catch {
       d1 = false; // binding existe, mas migração não aplicada
@@ -20,3 +24,7 @@ export async function onRequestGet({ env }) {
     horario: new Date().toISOString(),
   });
 }
+
+// HEAD: mesma resposta do GET; o _middleware remove o corpo.
+export const onRequestHead = onRequestGet;
+export const onRequest = metodoNaoPermitido("GET");

@@ -5,54 +5,99 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Simulador de Médias</title>
   <meta name="description" content="Cadastre suas disciplinas, lance suas notas e descubra a nota mínima para passar.">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#2f5d50">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232f5d50'/%3E%3Cpath d='M9 22l5-12 5 12M11 18h6M22 10v12' stroke='%23fff' stroke-width='2.4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="/styles.css">
   <script type="module" src="/js/app.js"></script>
 </head>
 <body>
+  <a href="#detalhe" id="pular" class="pular">Pular para o conteúdo</a>
+
   <header class="topo">
     <div class="marca">
       <span class="marca-icone" aria-hidden="true">A+</span>
-      <span>Simulador de Médias</span>
+      <span class="marca-nome">Simulador de Médias</span>
     </div>
-    <div id="perfil" class="perfil" hidden>
-      <img id="perfil-avatar" class="avatar" alt="" width="36" height="36">
-      <div class="perfil-texto">
-        <strong id="perfil-nome"></strong>
-        <small>ID Discord <span id="perfil-id"></span></small>
+    <div id="perfil" class="conta" hidden>
+      <button id="btn-conta" class="btn-conta" type="button" aria-expanded="false" aria-controls="menu-conta">
+        <img id="perfil-avatar" class="avatar" alt="" width="36" height="36">
+        <span id="perfil-inicial" class="avatar avatar-inicial" aria-hidden="true" hidden></span>
+        <span id="perfil-nome" class="conta-nome"></span>
+        <svg class="icone conta-seta" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div id="menu-conta" class="menu-conta" hidden>
+        <div class="menu-cabecalho">
+          <strong id="menu-nome"></strong>
+          <small>ID Discord <span id="menu-id"></span></small>
+        </div>
+        <ul class="menu-itens">
+          <li><button id="acao-baixar" type="button" class="menu-item">
+            <svg class="icone" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/></svg>
+            Baixar meus dados (JSON)</button></li>
+          <li><button id="acao-sair" type="button" class="menu-item">
+            <svg class="icone" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="M15 4h4v16h-4"/><path d="M10 16l-4-4 4-4"/><path d="M6 12h11"/></svg>
+            Sair</button></li>
+          <li class="menu-separador" aria-hidden="true"></li>
+          <li><button id="acao-excluir" type="button" class="menu-item menu-item-perigo">
+            <svg class="icone" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M6 7l1 13h10l1-13"/><path d="M9 7V4h6v3"/></svg>
+            Excluir minha conta</button></li>
+        </ul>
       </div>
-      <button id="btn-sair" class="btn btn-fantasma" type="button">Sair</button>
     </div>
   </header>
 
+  <!-- Carregando (estado inicial) -->
+  <main id="tela-carregando" class="tela-centro" aria-busy="true">
+    <div class="carregando" role="status">
+      <span class="spinner" aria-hidden="true"></span>
+      <span>Carregando…</span>
+    </div>
+  </main>
+
+  <!-- Erro de conexão -->
+  <main id="tela-erro" class="tela-centro" hidden>
+    <section class="login-cartao" aria-labelledby="erro-titulo">
+      <h1 id="erro-titulo" tabindex="-1">Não foi possível carregar</h1>
+      <p id="erro-mensagem"></p>
+      <button id="btn-tentar" class="btn btn-primario" type="button">Tentar novamente</button>
+    </section>
+  </main>
+
   <!-- Tela de login -->
-  <main id="tela-login" class="tela-login" hidden>
-    <section class="login-cartao">
-      <h1>Quanto falta para passar?</h1>
+  <main id="tela-login" class="tela-centro" hidden>
+    <section class="login-cartao" aria-labelledby="login-titulo">
+      <h1 id="login-titulo" tabindex="-1">Quanto falta para passar?</h1>
       <p>Cadastre as disciplinas do semestre com os pesos de provas, trabalhos e listas. Conforme você lança as notas, o simulador mostra a média parcial e a nota mínima que precisa tirar no que falta.</p>
+      <ul class="login-destaques">
+        <li>Cálculo na hora, a cada nota digitada</li>
+        <li>Nota mínima para aprovação direta, exame ou para não reprovar</li>
+        <li>Simulação “E se…?” sem alterar suas notas</li>
+      </ul>
       <a id="btn-login" class="btn btn-discord" href="/api/auth/discord">
-        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M20.3 4.4A19.6 19.6 0 0 0 15.4 3l-.6 1.3a18 18 0 0 0-5.6 0L8.6 3a19.6 19.6 0 0 0-4.9 1.5C.6 9.1-.3 13.6.2 18.1a19.8 19.8 0 0 0 6 3l1.3-2.1a12.8 12.8 0 0 1-2-1l.5-.4a14.1 14.1 0 0 0 12 0l.5.4a12.8 12.8 0 0 1-2 1l1.3 2.1a19.7 19.7 0 0 0 6-3c.5-5.2-.9-9.7-3.5-13.7ZM8.5 15.3c-1.2 0-2.2-1.1-2.2-2.4s1-2.4 2.2-2.4 2.2 1.1 2.2 2.4-1 2.4-2.2 2.4Zm7 0c-1.2 0-2.2-1.1-2.2-2.4s1-2.4 2.2-2.4 2.2 1.1 2.2 2.4-1 2.4-2.2 2.4Z"/></svg>
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path fill="currentColor" d="M20.3 4.4A19.6 19.6 0 0 0 15.4 3l-.6 1.3a18 18 0 0 0-5.6 0L8.6 3a19.6 19.6 0 0 0-4.9 1.5C.6 9.1-.3 13.6.2 18.1a19.8 19.8 0 0 0 6 3l1.3-2.1a12.8 12.8 0 0 1-2-1l.5-.4a14.1 14.1 0 0 0 12 0l.5.4a12.8 12.8 0 0 1-2 1l1.3 2.1a19.7 19.7 0 0 0 6-3c.5-5.2-.9-9.7-3.5-13.7ZM8.5 15.3c-1.2 0-2.2-1.1-2.2-2.4s1-2.4 2.2-2.4 2.2 1.1 2.2 2.4-1 2.4-2.2 2.4Zm7 0c-1.2 0-2.2-1.1-2.2-2.4s1-2.4 2.2-2.4 2.2 1.1 2.2 2.4-1 2.4-2.2 2.4Z"/></svg>
         Entrar com Discord
       </a>
-      <p id="login-aviso" class="aviso" hidden></p>
+      <p id="login-aviso" class="aviso" role="alert" hidden></p>
+      <p class="privacidade">Privacidade: do Discord usamos apenas seu ID, nome e avatar. Suas disciplinas e notas ficam salvas no Cloudflare D1, só você tem acesso a elas, e você pode baixar ou excluir tudo a qualquer momento no menu da sua conta.</p>
     </section>
   </main>
 
   <!-- Aplicação -->
   <main id="tela-app" class="tela-app" hidden>
-    <aside class="lateral">
+    <aside class="lateral" aria-labelledby="titulo-grade">
       <div class="lateral-topo">
-        <h2>Minha grade</h2>
+        <h2 id="titulo-grade">Minha grade</h2>
         <button id="btn-nova" class="btn btn-primario btn-pequeno" type="button">+ Disciplina</button>
       </div>
       <nav id="lista-disciplinas" class="lista-disciplinas" aria-label="Disciplinas"></nav>
     </aside>
 
-    <section id="detalhe" class="detalhe" aria-live="polite"></section>
+    <section id="detalhe" class="detalhe" tabindex="-1" aria-label="Conteúdo"></section>
   </main>
 
   <!-- Editor de disciplina / fórmula -->
-  <dialog id="editor" class="editor">
+  <dialog id="editor" class="editor" aria-labelledby="editor-titulo">
     <form id="form-disciplina" method="dialog" novalidate>
       <header class="editor-topo">
         <h2 id="editor-titulo">Nova disciplina</h2>
@@ -62,22 +107,22 @@
       <div class="editor-corpo">
         <div class="grade-campos">
           <label class="campo campo-largo">Nome da disciplina
-            <input name="nome" required maxlength="80" placeholder="Ex.: Cálculo II">
+            <input name="nome" required maxlength="80" placeholder="Ex.: Cálculo II" autocomplete="off">
           </label>
           <label class="campo">Semestre
-            <input name="semestre" required maxlength="20" placeholder="2026.2">
+            <input name="semestre" required maxlength="20" placeholder="2026.2" autocomplete="off">
           </label>
           <label class="campo">Nota máxima
-            <input name="nota_maxima" inputmode="decimal" value="10">
+            <input name="nota_maxima" inputmode="decimal" value="10" autocomplete="off">
           </label>
           <label class="campo">Aprovação direta (média ≥)
-            <input name="media_aprovacao" inputmode="decimal" value="7">
+            <input name="media_aprovacao" inputmode="decimal" value="7" autocomplete="off">
           </label>
           <label class="campo">Vai para exame (média ≥)
-            <input name="media_minima_exame" inputmode="decimal" value="4">
+            <input name="media_minima_exame" inputmode="decimal" value="4" autocomplete="off">
           </label>
           <label class="campo">Média final pós-exame (≥)
-            <input name="media_final_exame" inputmode="decimal" value="5">
+            <input name="media_final_exame" inputmode="decimal" value="5" autocomplete="off">
             <small>Calculada como (média + exame) ÷ 2</small>
           </label>
         </div>
@@ -92,7 +137,7 @@
           <button type="button" class="btn btn-secundario btn-pequeno" data-add="trabalho">+ Trabalho</button>
           <button type="button" class="btn btn-secundario btn-pequeno" data-add="lista">+ Lista</button>
         </div>
-        <div id="editor-distribuicao" class="distribuicao"></div>
+        <div id="editor-distribuicao" class="distribuicao" aria-hidden="true"></div>
         <p id="editor-erro" class="erro" role="alert" hidden></p>
       </div>
 
@@ -103,7 +148,30 @@
     </form>
   </dialog>
 
-  <div id="toast" class="toast" role="status" hidden></div>
+  <!-- Confirmação (exclusões) -->
+  <dialog id="dlg-confirmar" class="editor editor-pequeno" aria-labelledby="confirmar-titulo" aria-describedby="confirmar-texto">
+    <form id="form-confirmar" method="dialog" novalidate>
+      <header class="editor-topo">
+        <h2 id="confirmar-titulo">Confirmar</h2>
+        <button type="button" class="btn-x" data-cancelar aria-label="Fechar">×</button>
+      </header>
+      <div class="editor-corpo">
+        <div id="confirmar-texto" class="confirmar-texto"></div>
+        <label id="confirmar-campo" class="campo" hidden>
+          <span>Para confirmar, digite <strong id="confirmar-palavra"></strong> (em maiúsculas)</span>
+          <input id="confirmar-input" autocomplete="off" autocapitalize="characters" spellcheck="false">
+        </label>
+        <p id="confirmar-erro" class="erro" role="alert" hidden></p>
+      </div>
+      <footer class="editor-rodape">
+        <button type="button" class="btn btn-fantasma" data-cancelar>Cancelar</button>
+        <button type="submit" class="btn btn-perigo-cheio" id="confirmar-ok">Confirmar</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <div id="anuncio" class="sr-only" aria-live="polite" aria-atomic="true"></div>
 
   <footer class="rodape">
     Chave Única: <code>P26-2B-8356-94BE-3650-165C</code> · HTML5, CSS3 e JavaScript puro · Cloudflare Pages Functions + D1 · Login Discord

@@ -8,8 +8,16 @@ import { TIPOS } from "../public/js/calc.js";
 export const LIMITE_DISCIPLINAS = 40;
 export const LIMITE_AVALIACOES = 30;
 
+// Caracteres de controle e de direção bidi (exceto espaços, normalizados abaixo) nunca são gravados.
+const CONTROLE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F​-‏‪-‮⁦-⁩﻿]/g;
+
+/** Remove controle/bidi, normaliza espaços e corta no tamanho máximo (para textos de fora, ex.: nome do Discord). */
+export function limparTexto(v, max) {
+  return typeof v === "string" ? v.replace(CONTROLE, "").replace(/\s+/g, " ").trim().slice(0, max) : "";
+}
+
 function texto(v, campo, min, max) {
-  const s = typeof v === "string" ? v.replace(/\s+/g, " ").trim() : "";
+  const s = typeof v === "string" ? v.replace(CONTROLE, "").replace(/\s+/g, " ").trim() : "";
   if (s.length < min || s.length > max) {
     throw new HttpError(400, `"${campo}" deve ter entre ${min} e ${max} caracteres.`);
   }
@@ -23,7 +31,7 @@ function numero(v, campo, { min, max, minExclusivo = false }) {
     n = /^-?\d+(\.\d+)?$/.test(s) ? Number(s) : NaN; // rejeita "", "0x10", "1e3"...
   }
   if (typeof n !== "number" || !Number.isFinite(n)) throw new HttpError(400, `"${campo}" deve ser um número.`);
-  n = Math.round(n * 100) / 100; // arredonda ANTES de checar a faixa (0,001 vira 0 e é recusado com 400)
+  n = Math.round(n * 100) / 100 + 0; // arredonda ANTES de checar a faixa (0,001 vira 0 e é recusado com 400); "+ 0" troca −0 por 0
   if (minExclusivo ? n <= min : n < min) throw new HttpError(400, `"${campo}" deve ser ${minExclusivo ? "maior que" : "no mínimo"} ${min}.`);
   if (n > max) throw new HttpError(400, `"${campo}" deve ser no máximo ${max}.`);
   return n;
@@ -37,7 +45,9 @@ export function validarNota(v, notaMaxima, campo = "nota") {
 
 /** Valida o cadastro completo de uma disciplina (regras + fórmula de avaliações). */
 export function validarDisciplina(body) {
-  if (!body || typeof body !== "object") throw new HttpError(400, "Corpo inválido.");
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new HttpError(400, "Envie os dados da disciplina como um objeto JSON.");
+  }
 
   const nota_maxima = numero(body.nota_maxima ?? 10, "Nota máxima", { min: 0, max: 1000, minExclusivo: true });
   const d = {
@@ -59,12 +69,12 @@ export function validarDisciplina(body) {
   const idsVistos = new Set();
   d.avaliacoes = lista.map((a, i) => {
     const pos = `Avaliação ${i + 1}`;
-    if (!a || typeof a !== "object") throw new HttpError(400, `${pos} inválida.`);
+    if (!a || typeof a !== "object" || Array.isArray(a)) throw new HttpError(400, `${pos} inválida.`);
     if (!TIPOS.includes(a.tipo)) throw new HttpError(400, `${pos}: tipo deve ser prova, trabalho ou lista.`);
     let id = null;
     if (a.id !== undefined && a.id !== null) {
-      id = Number(a.id);
-      if (!Number.isInteger(id) || id <= 0 || idsVistos.has(id)) throw new HttpError(400, `${pos}: id inválido.`);
+      id = idPositivo(a.id);
+      if (id === null || idsVistos.has(id)) throw new HttpError(400, `${pos}: id inválido.`);
       idsVistos.add(id);
     }
     return {
@@ -79,8 +89,24 @@ export function validarDisciplina(body) {
   return d;
 }
 
+/** Inteiro positivo seguro: aceita número ou texto só com dígitos (recusa "1e3", " 5", "0x10"). */
+function idPositivo(v) {
+  if (typeof v === "string" && !/^[1-9]\d{0,15}$/.test(v)) return null;
+  const id = typeof v === "string" ? Number(v) : v;
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
+}
+
 export function validarId(v) {
-  const id = Number(v);
-  if (!Number.isInteger(id) || id <= 0) throw new HttpError(400, "Id inválido.");
+  const id = idPositivo(v);
+  if (id === null) throw new HttpError(400, "Id inválido: use um número inteiro positivo.");
   return id;
+}
+
+/** Corpo exigido por DELETE /api/conta: {"confirmar":"EXCLUIR"} (exatamente). */
+export const CONFIRMACAO_EXCLUSAO = "EXCLUIR";
+export function validarConfirmacaoExclusao(body) {
+  const ok = body && typeof body === "object" && !Array.isArray(body) && body.confirmar === CONFIRMACAO_EXCLUSAO;
+  if (!ok) {
+    throw new HttpError(400, `Para excluir a conta, envie o JSON {"confirmar":"${CONFIRMACAO_EXCLUSAO}"}.`);
+  }
 }

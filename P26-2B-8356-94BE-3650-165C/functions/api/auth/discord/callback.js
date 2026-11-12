@@ -4,7 +4,9 @@
  * 3. Busca /users/@me (user_id, nome, avatar)  4. Grava/atualiza o usuário no D1
  * 5. Cria a sessão no D1 e devolve o cookie HttpOnly.
  */
-import { cookie, criarSessao, lerCookie } from "../../../../lib/session.js";
+import { metodoNaoPermitido } from "../../../../lib/http.js";
+import { cookie, criarSessao, encerrarSessao, lerCookie } from "../../../../lib/session.js";
+import { limparTexto } from "../../../../lib/validacao.js";
 
 function voltar(origin, motivo, extraCookies = []) {
   const headers = new Headers({ Location: new URL(`/?erro_login=${encodeURIComponent(motivo)}`, origin).href });
@@ -12,11 +14,17 @@ function voltar(origin, motivo, extraCookies = []) {
   return new Response(null, { status: 302, headers });
 }
 
+/** O código de erro do Discord volta para a URL do app: só aceita o formato padrão do OAuth2. */
+function codigoErroSeguro(v) {
+  return /^[a-z_]{1,40}$/.test(v) ? v : "erro_discord";
+}
+
 export async function onRequestGet({ request, env }) {
   const url = new URL(request.url);
   const limparState = cookie("oauth_state", "", 0, request);
 
-  if (url.searchParams.get("error")) return voltar(url.origin, url.searchParams.get("error"), [limparState]);
+  const erroDiscord = url.searchParams.get("error");
+  if (erroDiscord) return voltar(url.origin, codigoErroSeguro(erroDiscord), [limparState]);
 
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
@@ -51,9 +59,11 @@ export async function onRequestGet({ request, env }) {
 
     const userId = String(du.id);
     if (!/^\d{5,25}$/.test(userId)) return voltar(url.origin, "perfil_invalido", [limparState]);
-    const username = String(du.global_name || du.username || "Estudante").slice(0, 80);
-    const avatarUrl = du.avatar
-      ? `https://cdn.discordapp.com/avatars/${userId}/${du.avatar}.${du.avatar.startsWith("a_") ? "gif" : "png"}?size=128`
+    const username = limparTexto(String(du.global_name || du.username || ""), 80) || "Estudante";
+    // O hash do avatar vai para uma URL gravada no banco: só aceita o formato do Discord.
+    const avatar = typeof du.avatar === "string" && /^(a_)?[0-9a-f]{32}$/.test(du.avatar) ? du.avatar : null;
+    const avatarUrl = avatar
+      ? `https://cdn.discordapp.com/avatars/${userId}/${avatar}.${avatar.startsWith("a_") ? "gif" : "png"}?size=128`
       : `https://cdn.discordapp.com/embed/avatars/${Number((BigInt(userId) >> 22n) % 6n)}.png`;
 
     await env.DB.prepare(
@@ -62,6 +72,7 @@ export async function onRequestGet({ request, env }) {
                                           atualizado_em = CURRENT_TIMESTAMP`
     ).bind(userId, username, avatarUrl).run();
 
+    await encerrarSessao(env, request); // descarta a sessão anterior deste navegador, se houver
     const sessao = await criarSessao(env, userId, request);
     const headers = new Headers({ Location: new URL("/", url.origin).href });
     headers.append("Set-Cookie", sessao);
@@ -72,3 +83,7 @@ export async function onRequestGet({ request, env }) {
     return voltar(url.origin, "erro_inesperado", [limparState]);
   }
 }
+
+// HEAD não executa o OAuth (o code só pode ser trocado uma vez): responde vazio, sem efeitos.
+export const onRequestHead = () => new Response(null, { status: 204 });
+export const onRequest = metodoNaoPermitido("GET");
