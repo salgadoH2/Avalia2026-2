@@ -55,7 +55,32 @@ export const ICONES = {
   fechar: ["M6 6l12 12", "M18 6L6 18"],
   alerta: ["M12 3l10 18H2z", "M12 10v5", "M12 18v.01"],
   recarregar: ["M20 11a8 8 0 1 0-2.3 5.7", "M20 4v7h-7"],
+  check: ["M5 12.5l4.5 4.5L19 7.5"],
+  checkCirculo: ["M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z", "M8 12.5l3 3 5-6"],
+  xCirculo: ["M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z", "M9 9l6 6", "M15 9l-6 6"],
+  alvo: ["M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z", "M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0z", "M12 12h.01"],
+  relogio: ["M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z", "M12 7v5l3 2"],
+  info: ["M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z", "M12 11v5", "M12 8v.01"],
+  menos: ["M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z", "M8 12h8"],
+  livro: ["M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z", "M4 21V5", "M8 7h7"],
+  setaDireita: ["M5 12h14", "M13 6l6 6-6 6"],
+  setaEsquerda: ["M19 12H5", "M11 6l-6 6 6 6"],
+  grafico: ["M4 20V10", "M10 20V4", "M16 20v-7", "M22 20H2"],
+  reticencias: ["M5 12h.01", "M12 12h.01", "M19 12h.01"],
+  calendario: ["M4 6h16v14H4z", "M4 10h16", "M8 3v4", "M16 3v4"],
 };
+
+/** Anel de progresso (conic-gradient) com conteúdo no centro. `p` em 0–100. */
+export function anel(p, conteudo, classe = "") {
+  const v = Math.max(0, Math.min(100, Number(p) || 0));
+  return el("span", { class: `anel ${classe}`.trim(), style: `--p:${v}` }, el("span", { class: "anel-centro" }, conteudo));
+}
+
+/** Clona uma ilustração SVG de um <template> do index.html (sem innerHTML). */
+export function ilustracao(id) {
+  const t = document.getElementById(id);
+  return t?.content?.firstElementChild ? t.content.firstElementChild.cloneNode(true) : null;
+}
 
 const numero = (n, min, max) =>
   Number(n).toLocaleString("pt-BR", { minimumFractionDigits: min, maximumFractionDigits: max });

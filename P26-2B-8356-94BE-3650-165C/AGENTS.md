@@ -21,6 +21,10 @@ flowchart LR
   O -->|correções| O
   O -->|fase 3| A6[6 · Documentação]
   A6 -->|relatório| O
+  O -->|fase 4| A7[7 · Design visual]
+  A7 -->|redesenho| A8[8 · Revisão de design]
+  A8 -->|nota 8,0 + 15 ajustes| O
+  O -->|14 ajustes aceitos| A7
 ```
 
 | Fase | Agentes | Modo |
@@ -29,6 +33,7 @@ flowchart LR
 | 1 | Backend, Interface, Domínio, Segurança | **paralelo**, arquivos disjuntos |
 | 2 | Teste e Validação | independente, somente leitura do app |
 | 3 | Documentação | independente |
+| 4 | Design visual → Revisão de design (independente, somente leitura) → Design visual | ciclo de crítica e correção |
 
 ---
 
@@ -96,6 +101,19 @@ flowchart LR
 - **Podia alterar:** `README.md`, `docs/ARQUITETURA.md`.
 - **Entregas:** README reestruturado (mantendo o cabeçalho oficial intacto) e [`docs/ARQUITETURA.md`](./docs/ARQUITETURA.md) com diagramas Mermaid de componentes, sequência (login e lançamento de nota) e modelo de dados, tabela de rotas e decisões de projeto. Conferiu cada afirmação lendo o código e rodando as suítes.
 
+### Agente 7: Design Visual e UI
+- **Skills:** [`skills/design-visual/SKILL.md`](./skills/design-visual/SKILL.md), [`skills/vanilla-dom-ui/SKILL.md`](./skills/vanilla-dom-ui/SKILL.md)
+- **Podia alterar:** `public/styles.css`, `public/index.html`, a parte de apresentação de `public/js/app.js` e `public/js/ui/*`, `public/img/**`, `tests/demo-local.mjs`. Proibido mudar comportamento, cálculo, API ou CSP.
+- **Pesquisa de referências** antes de desenhar: calculadoras de nota final (bloco "quanto preciso" em destaque), novo painel do Canvas (cartão por disciplina com nota visível), guias de dashboard (3–7 KPIs, situação com cor + ícone + rótulo), apps de finanças (anéis de progresso, cores de semáforo) e a landing do Linear (título forte + prévia do produto). Padrões adotados, sem copiar marca nem arte de ninguém.
+- **Entregas:** identidade visual própria (índigo + cores semânticas fixas, fonte do sistema com números tabulares, tokens de espaço/raio/sombra), shell com barra lateral fixa, landing de login com prévia do painel em HTML/CSS, KPIs com anéis `conic-gradient`, selos de situação, régua "Onde sua média pode terminar" com zonas de reprovação/exame/aprovação, tabela de notas refinada, ilustrações SVG próprias, menu "⋯" no celular. `tests/demo-local.mjs`: sobe o app local com um aluno e 9 disciplinas cobrindo todas as situações.
+- **Verificação:** 8 combinações (375/768/1280/1440 px × claro/escuro) × 17–19 estados: **0 falhas de contraste AA**, 0 rolagem horizontal, 0 erros de JavaScript, **0 violações de CSP**, simulação sem nenhum `PATCH`; suítes 52/52 e 30/30 mantidas.
+
+### Agente 8: Revisão de Design e UX (independente)
+- **Skill:** [`skills/design-visual/SKILL.md`](./skills/design-visual/SKILL.md) (como critério de avaliação)
+- **Podia alterar:** nada (somente leitura). Subiu o demo, tirou capturas de tela de todas as telas em 4 larguras e 2 temas e comparou com produtos do gênero.
+- **Resultado:** nota **8,0/10** ("já parece um produto real"), 3 pontos fortes a preservar e 15 problemas priorizados com correção sugerida. Os mais importantes: barra lateral escondida sob o topo no fim da rolagem, cor de "Listas" igual à de alerta, nota do exame aparecendo depois do "Inalcançável", informação principal abaixo da dobra no celular.
+- **Decisão do orquestrador:** 14 itens aceitos e devolvidos ao Agente 7, que os corrigiu e verificou de novo. O item 15 (desabilitar o botão de excluir conta até digitar EXCLUIR) foi **recusado** porque contradiz um defeito confirmado pelo Agente 5 (desabilitado, o Enter com a palavra errada não dava aviso nenhum).
+
 ### Fase 0: versão inicial e primeira validação
 Antes das fases acima, o orquestrador construiu a primeira versão do sistema e um **agente de validação inicial** (subagente somente leitura) a auditou: nenhum problema crítico; 8 achados (`.gitignore` ausente, arredondamento antes da validação, cookie malformado gerando 500, edição de fórmula sobrescrevendo notas, entre outros), todos corrigidos naquela rodada.
 
@@ -109,6 +127,8 @@ Antes das fases acima, o orquestrador construiu a primeira versão do sistema e 
 | `node tests/api.test.mjs` (servidor + D1 locais reais) | **30/30** |
 | `node validar-local.mjs P26-2B-8356-94BE-3650-165C` | 9/9 itens |
 | Falhas críticas/altas de segurança | **0** |
+| Contraste AA / violações de CSP (8 combinações de tela e tema) | **0 / 0** |
+| Nota da revisão de design independente | **8,0/10**, com 14 ajustes aplicados |
 
 ## 4. Skills (pasta `skills/`)
 
@@ -120,3 +140,4 @@ Antes das fases acima, o orquestrador construiu a primeira versão do sistema e 
 | `seguranca-web` | Agentes 1 e 4 |
 | `teste-validacao` | Agente 5 e agente de validação inicial |
 | `documentacao-tecnica` | Agente 6 |
+| `design-visual` | Agentes 7 e 8 |

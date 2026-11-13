@@ -33,3 +33,7 @@ Cobertura:
 - **Cabeçalhos:** os cabeçalhos de `public/_headers` aparecem nas páginas, e a API responde com `Cache-Control: no-store`.
 
 A suíte nunca usa `--remote` nem a URL de produção.
+
+## `demo-local.mjs`: ambiente de demonstração (não é teste)
+`node tests/demo-local.mjs` recria um D1 em `%TEMP%\avalia-demo`, aplica as migrações, grava um aluno com 9 disciplinas em 2 semestres (todas as situações, escalas 0–10 e 0–100) e sobe `wrangler pages dev --port 8788` (ou `DEMO_PORT`).
+Abra a URL impressa e cole no console do navegador o comando `document.cookie="sid=…"` que o script mostra; Ctrl+C encerra o servidor. Também nunca usa `--remote`.

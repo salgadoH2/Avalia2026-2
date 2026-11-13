@@ -4,12 +4,12 @@
  * Módulos de apoio em ./ui/ (DOM seguro, API, diálogos, menu da conta, visão geral do semestre).
  */
 import { resumoDisciplina, simular, TIPOS, TIPO_LABEL } from "./calc.js";
-import { $, $$, el, fmt, fmt2, lerNumero, toast, anunciar, icone, ICONES, telaEstreita, movimentoReduzido } from "./ui/dom.js";
+import { $, $$, el, fmt, fmt2, lerNumero, toast, anunciar, icone, ICONES, anel, telaEstreita, movimentoReduzido } from "./ui/dom.js";
 import { api, definirAoExpirar } from "./ui/api.js";
 import { abrirDialogo, confirmar } from "./ui/dialogos.js";
 import { preencherConta, iniciarMenuConta } from "./ui/conta.js";
 import { renderVisaoGeral, renderOnboarding, MODELO_PADRAO } from "./ui/semestre.js";
-import { textoSituacao, TOM_SITUACAO, noRestante } from "./ui/situacao.js";
+import { textoSituacao, seloSituacao, TOM_SITUACAO, noRestante } from "./ui/situacao.js";
 
 const TITULO_APP = "Simulador de Médias";
 
@@ -179,10 +179,13 @@ function renderEsqueleto() {
   det.setAttribute("aria-busy", "true");
   det.replaceChildren(
     el("p", { class: "sr-only", role: "status" }, "Carregando suas disciplinas…"),
-    el("div", { class: "cartao esqueleto esqueleto-topo", "aria-hidden": "true" }),
-    el("div", { class: "contadores", "aria-hidden": "true" },
-      [1, 2, 3, 4].map(() => el("div", { class: "contador esqueleto esqueleto-bloco" }))),
-    el("div", { class: "cartao esqueleto esqueleto-grande", "aria-hidden": "true" })
+    el("div", { class: "esqueleto-cabecalho", "aria-hidden": "true" },
+      el("div", { class: "esqueleto esqueleto-sobre" }), el("div", { class: "esqueleto esqueleto-titulo" })),
+    el("div", { class: "kpis", "aria-hidden": "true" },
+      el("div", { class: "kpi esqueleto esqueleto-bloco" }), el("div", { class: "kpi esqueleto esqueleto-bloco" }),
+      el("div", { class: "kpi kpi-situacoes esqueleto esqueleto-bloco" })),
+    el("div", { class: "grade-disciplinas", "aria-hidden": "true" },
+      [1, 2, 3].map(() => el("div", { class: "esqueleto esqueleto-grande" })))
   );
 }
 
@@ -195,6 +198,7 @@ function renderErroCarregamento(msg) {
   det.replaceChildren(
     el("section", { class: "cartao estado-erro", role: "alert" },
       el("span", { class: "estado-erro-icone", "aria-hidden": "true" }, icone(ICONES.alerta, 28)),
+      el("p", { class: "sobretitulo sobretitulo-perigo" }, "Falha de conexão"),
       el("h1", { id: "titulo-pagina", tabindex: "-1" }, "Não foi possível carregar suas disciplinas"),
       el("p", {}, msg),
       botao
@@ -243,6 +247,7 @@ function renderDetalhe() {
     renderVisaoGeral(area, {
       disciplinas: estado.disciplinas,
       semestre: estado.semestreVisao,
+      usuario: estado.usuario,
       aoTrocarSemestre: (s) => {
         estado.semestreVisao = s;
         renderDetalhe();
@@ -264,8 +269,9 @@ function renderDetalhe() {
     cartaoTopo(d, sim),
     sim ? faixaSimulacao(d) : null,
     el("div", { id: "area-resumo", class: "area-resumo" }),
-    tabelaNotas(d, sim),
-    el("div", { id: "area-tipos", class: "cartao" })
+    el("div", { class: "grade-detalhe" },
+      tabelaNotas(d, sim),
+      el("div", { id: "area-tipos", class: "cartao cartao-tipos" }))
   ].filter(Boolean));
   atualizarResumo(d, resumo);
   document.title = `${sim ? "Simulação · " : ""}${d.nome} · ${TITULO_APP}`;
@@ -273,19 +279,23 @@ function renderDetalhe() {
 
 function cartaoTopo(d, sim) {
   const semRestantes = d.resumo.restantes === 0;
-  return el("div", { class: "cartao" },
+  const imprimir = () => window.print();
+  return el("div", { class: "cabecalho-pagina cabecalho-disciplina" },
     el("div", { class: "detalhe-topo" },
-      el("div", { class: "detalhe-titulo" },
-        el("a", { class: "voltar", href: "#/visao-geral" }, "← Visão geral"),
+      el("nav", { class: "trilha", "aria-label": "Trilha de navegação" },
+        el("a", { class: "voltar", href: "#/visao-geral" }, icone(ICONES.setaEsquerda, 16), "Visão geral"),
+        el("span", { class: "trilha-sep", "aria-hidden": "true" }, "/"),
+        el("span", { class: "trilha-atual" }, `Semestre ${d.semestre}`)),
+      el("div", { class: "titulo-linha" },
         el("h1", { id: "titulo-pagina", tabindex: "-1" }, d.nome),
+        el("span", { id: "selo-pagina", class: "selo-pagina" })),
+      el("div", { class: "detalhe-barra" },
         el("ul", { class: "regras", "aria-label": "Regras da disciplina" },
-          el("li", { class: "chip" }, `Semestre ${d.semestre}`),
           el("li", { class: "chip" }, `Nota máx. ${fmt(d.nota_maxima)}`),
-          el("li", { class: "chip" }, `Aprovação direta ≥ ${fmt(d.media_aprovacao)}`),
-          el("li", { class: "chip" }, `Exame se ≥ ${fmt(d.media_minima_exame)}`),
+          el("li", { class: "chip chip-ok" }, `Aprovação direta ≥ ${fmt(d.media_aprovacao)}`),
+          el("li", { class: "chip chip-alerta" }, `Exame se ≥ ${fmt(d.media_minima_exame)}`),
           el("li", { class: "chip" }, `Pós-exame ≥ ${fmt(d.media_final_exame)}`)
-        )
-      ),
+        ),
       el("div", { class: "acoes" },
         el("button", {
           id: "btn-simular", type: "button",
@@ -295,20 +305,70 @@ function cartaoTopo(d, sim) {
           title: semRestantes ? "Todas as avaliações já têm nota" : "Testar notas hipotéticas sem salvar",
           onclick: () => (sim ? sairSimulacao() : entrarSimulacao(d)),
         }, icone(ICONES.frasco, 16), "E se…?"),
-        el("button", { type: "button", class: "btn btn-secundario btn-pequeno", onclick: () => window.print() },
-          icone(ICONES.impressora, 16), "Imprimir"),
         sim ? null : el("button", { type: "button", class: "btn btn-secundario btn-pequeno", onclick: () => abrirEditor(d) },
           icone(ICONES.lapis, 16), "Editar fórmula"),
-        sim ? null : el("button", { type: "button", class: "btn btn-perigo btn-pequeno", onclick: () => excluir(d) },
-          icone(ICONES.lixeira, 16), "Excluir")
-      )
+        el("button", { type: "button", class: "btn btn-secundario btn-pequeno acao-sec", onclick: imprimir },
+          icone(ICONES.impressora, 16), "Imprimir"),
+        sim ? null : el("button", { type: "button", class: "btn btn-perigo btn-pequeno acao-sec", onclick: () => excluir(d) },
+          icone(ICONES.lixeira, 16), "Excluir"),
+        // No celular, Imprimir e Excluir ficam num menu "⋯" (mesmo padrão de teclado do menu da conta).
+        menuMais([
+          ["Imprimir boletim", ICONES.impressora, imprimir],
+          sim ? null : ["Excluir disciplina", ICONES.lixeira, () => excluir(d), true],
+        ].filter(Boolean))
+      ))
     )
   );
+}
+
+/** Menu "Mais ações" (disclosure): botão com aria-expanded + lista; setas, Home/End, Esc e clique fora fecham. */
+function menuMais(itens) {
+  const botao = el("button", { type: "button", class: "btn btn-secundario btn-pequeno btn-mais",
+    "aria-expanded": "false", "aria-controls": "menu-mais", "aria-label": "Mais ações" }, icone(ICONES.reticencias, 18));
+  const lista = el("ul", { id: "menu-mais", class: "menu-conta menu-mais menu-itens", hidden: true });
+  const botoes = () => $$("button", lista);
+  const foraDoMenu = (e) => { if (!lista.contains(e.target) && !botao.contains(e.target)) fechar(false); };
+  function abrir(primeiro = true) {
+    lista.hidden = false;
+    botao.setAttribute("aria-expanded", "true");
+    document.addEventListener("pointerdown", foraDoMenu);
+    (primeiro ? botoes()[0] : botoes().at(-1))?.focus();
+  }
+  function fechar(devolverFoco = true) {
+    if (lista.hidden) return;
+    lista.hidden = true;
+    botao.setAttribute("aria-expanded", "false");
+    document.removeEventListener("pointerdown", foraDoMenu);
+    if (devolverFoco) botao.focus();
+  }
+  for (const [rotulo, ic, acao, perigo] of itens) {
+    lista.append(el("li", {}, el("button", { type: "button", class: `menu-item${perigo ? " menu-item-perigo" : ""}`,
+      onclick: () => { fechar(); acao(); } }, icone(ic, 18), rotulo)));
+  }
+  botao.addEventListener("click", () => (lista.hidden ? abrir() : fechar()));
+  botao.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown") { e.preventDefault(); abrir(true); }
+    if (e.key === "ArrowUp") { e.preventDefault(); abrir(false); }
+  });
+  lista.addEventListener("keydown", (e) => {
+    const l = botoes();
+    const i = l.indexOf(document.activeElement);
+    if (e.key === "Escape") { e.preventDefault(); fechar(); }
+    else if (e.key === "ArrowDown") { e.preventDefault(); l[(i + 1) % l.length].focus(); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); l[(i - 1 + l.length) % l.length].focus(); }
+    else if (e.key === "Home") { e.preventDefault(); l[0].focus(); }
+    else if (e.key === "End") { e.preventDefault(); l.at(-1).focus(); }
+  });
+  lista.addEventListener("focusout", (e) => {
+    if (e.relatedTarget && !lista.contains(e.relatedTarget) && e.relatedTarget !== botao) fechar(false);
+  });
+  return el("div", { class: "mais-acoes" }, botao, lista);
 }
 
 // ---------- Modo simulação ("E se…?") ----------
 function faixaSimulacao(d) {
   return el("section", { class: "faixa-simulacao", "aria-labelledby": "titulo-simulacao" },
+    el("span", { class: "fs-icone", "aria-hidden": "true" }, icone(ICONES.frasco, 22)),
     el("div", { class: "fs-texto" },
       el("h2", { id: "titulo-simulacao" }, "Simulação — não salvo"),
       el("p", {}, "Digite notas hipotéticas nas avaliações sem nota. Nada é enviado ao servidor; suas notas reais continuam como estão.")
@@ -424,16 +484,18 @@ function tabelaNotas(d, sim) {
     }
     tbody.append(el("tr", {},
       el("th", { scope: "row", class: "col-nome" },
-        el("span", { class: `marcador-tipo ponto`, style: `background:var(--cor-${a.tipo})`, "aria-hidden": "true" }),
+        el("span", { class: `marcador-tipo ponto ponto-tipo-${a.tipo}`, "aria-hidden": "true" }),
         a.nome),
       el("td", { class: "col-tipo" }, el("span", { class: `tipo tipo-${a.tipo}` }, a.tipo)),
-      el("td", { class: "num col-peso" }, `${fmt(a.peso)} (${fmt((a.peso / pesoTotal) * 100, 1)}%)`),
-      el("td", { class: "num" }, celulaNota),
+      el("td", { class: "num col-peso" }, fmt(a.peso), el("span", { class: "peso-pct" }, ` (${fmt((a.peso / pesoTotal) * 100, 1)}%)`)),
+      el("td", { class: "num col-nota" }, celulaNota),
       el("td", { class: "col-status" }, status)
     ));
   }
-  return el("section", { class: "cartao", "aria-labelledby": "titulo-notas" },
-    el("h2", { id: "titulo-notas", class: "titulo-secao" }, sim ? "Notas (simulação)" : "Notas obtidas"),
+  return el("section", { class: "cartao cartao-notas", "aria-labelledby": "titulo-notas" },
+    el("div", { class: "secao-cabecalho" },
+      el("h2", { id: "titulo-notas", class: "titulo-secao" }, sim ? "Notas (simulação)" : "Notas obtidas"),
+      el("span", { id: "contagem-notas", class: "contagem" })),
     el("div", { class: "rolagem-tabela" },
       el("table", { class: "tabela-notas" },
         el("caption", { class: "sr-only" }, `Avaliações de ${d.nome}`),
@@ -445,9 +507,9 @@ function tabelaNotas(d, sim) {
         tbody
       )
     ),
-    el("p", { class: "legenda" }, sim
+    el("p", { class: "legenda" }, icone(ICONES.info, 16), el("span", {}, sim
       ? "As notas lançadas ficam fixas. Nos campos vazios aparece a nota mínima que ainda falta para a aprovação direta."
-      : "Deixe em branco o que ainda não foi feito. Nos campos vazios aparece a nota mínima para aprovação direta. Use vírgula ou ponto: 7,5. Enter vai para a próxima nota.")
+      : "Deixe em branco o que ainda não foi feito. Nos campos vazios aparece a nota mínima para aprovação direta. Use vírgula ou ponto: 7,5. Enter vai para a próxima nota."))
   );
 }
 
@@ -529,43 +591,46 @@ function textoFaixa(d, r) {
   const nasRestantes = noRestante(r.restantes);
   switch (r.situacao) {
     case "aprovado":
-      return ["ok", "🎉", r.mediaFinal !== null ? "Aprovação direta!" : "Aprovação direta garantida",
+      return ["ok", "checkCirculo", r.mediaFinal !== null ? "Aprovação direta!" : "Aprovação direta garantida",
         r.mediaFinal !== null
           ? `Média final ${fmt2(r.mediaFinal)} — mínimo para aprovação direta: ${fmt(d.media_aprovacao)}.`
           : `Mesmo tirando zero ${nasRestantes}, sua média fica em pelo menos ${fmt2(r.pontosGarantidos)}.`];
     case "em_andamento":
-      return ["info", "🎯", `Precisa de ${fmt2(r.aprovacao.nota)} de média no que falta`,
+      return ["info", "alvo", `Precisa de ${fmt2(r.aprovacao.nota)} de média no que falta`,
         `Tirando pelo menos ${fmt2(r.aprovacao.nota)} ${nasRestantes} você passa direto, sem exame. ` +
         (r.evitarReprovacao.status === "garantido"
           ? "Reprovação direta já está descartada."
           : `Abaixo de ${fmt2(r.evitarReprovacao.nota)} você reprova sem direito a exame.`)];
     case "exame_inevitavel":
-      return ["alerta", "⚠️", "Aprovação direta não é mais possível",
+      return ["alerta", "alerta", "Aprovação direta não é mais possível",
         `Mesmo tirando ${fmt(max)} em tudo, a média máxima é ${fmt2(r.mediaMaxima)}. ` +
         (r.evitarReprovacao.status === "garantido"
           ? "O exame final já está garantido."
           : `Tire pelo menos ${fmt2(r.evitarReprovacao.nota)} ${nasRestantes} para ter direito ao exame.`)];
     case "exame":
-      return ["alerta", "📝", "Exame final",
+      return ["alerta", "livro", "Exame final",
         r.exame.status === "impossivel"
           ? `Média ${fmt2(r.mediaFinal)}: seria preciso ${fmt2(r.exame.nota)} no exame, acima da nota máxima.`
           : `Média ${fmt2(r.mediaFinal)}. Você precisa de ${fmt2(r.exame.nota)} no exame para chegar a ${fmt(d.media_final_exame)}.`];
     case "reprovado":
-      return ["perigo", "✗", "Reprovação direta",
+      return ["perigo", "xCirculo", "Reprovação direta",
         r.mediaFinal !== null
           ? `Média final ${fmt2(r.mediaFinal)}, abaixo de ${fmt(d.media_minima_exame)} (mínimo para exame).`
           : `Mesmo com ${fmt(max)} no que falta, a média máxima é ${fmt2(r.mediaMaxima)}.`];
     default:
-      return ["info", "ℹ️", "Sem avaliações", "Edite a fórmula para cadastrar avaliações."];
+      return ["info", "info", "Sem avaliações", "Edite a fórmula para cadastrar avaliações."];
   }
 }
+
+const ROTULO_META = { garantido: "Garantido", possivel: "Alcançável", dificil: "Exige esforço", impossivel: "Inalcançável" };
+const pctEscala = (v, max) => Math.max(0, Math.min(100, (Number(v) / Number(max)) * 100));
 
 function atualizarResumo(d, r) {
   const area = $("#area-resumo");
   if (!area) return;
   const sim = estado.simulacao?.disciplinaId === d.id;
   const max = d.nota_maxima;
-  const [tom, emoji, titulo, texto] = textoFaixa(d, r);
+  const [tom, iconeFaixa, titulo, texto] = textoFaixa(d, r);
 
   const metricas = el("div", { class: "metricas" },
     metrica("Média parcial", r.mediaParcial === null ? "—" : fmt2(r.mediaParcial), "só das avaliações já feitas"),
@@ -573,30 +638,48 @@ function atualizarResumo(d, r) {
     metrica("Média máxima possível", fmt2(r.mediaMaxima), `tirando ${fmt(max)} no que falta`),
     el("div", { class: "metrica" },
       el("div", { class: "metrica-rotulo" }, "Peso já avaliado"),
-      el("div", { class: "metrica-valor" }, `${fmt(r.percentualAvaliado, 0)}%`),
-      el("div", { class: "barra", "aria-hidden": "true" }, el("span", { style: `width:${r.percentualAvaliado}%` }))
-    )
+      el("div", { class: "metrica-valor metrica-valor-anel" }, `${fmt(r.percentualAvaliado, 0)}%`, anel(r.percentualAvaliado, "", "anel-linha")),
+      el("div", { class: "metrica-dica" }, r.restantes === 0 ? "todas as avaliações com nota" : r.restantes === 1 ? "1 avaliação sem nota" : `${r.restantes} avaliações sem nota`))
   );
 
+  // Em exame, o número que importa vem primeiro e as metas já perdidas ficam em tom neutro.
+  const emExame = r.situacao === "exame" || r.situacao === "exame_inevitavel";
+  const classeOrdem = (m) => classeMeta(m, max) + (emExame && m?.status === "impossivel" ? " encerrada" : "");
+  const metaAprov = meta("Aprovação direta (sem exame)", r.aprovacao, classeOrdem(r.aprovacao),
+    descricaoMeta(r.aprovacao, r, d.media_aprovacao), max);
+  const metaEvitar = meta("Evitar reprovação direta (ir ao exame)", r.evitarReprovacao, classeOrdem(r.evitarReprovacao),
+    descricaoMeta(r.evitarReprovacao, r, d.media_minima_exame), max);
+  const metaExame = r.exame && meta("Nota no exame final", r.exame, classeMeta(r.exame, max),
+    `(média ${fmt2(r.mediaFinal)} + exame) ÷ 2 ≥ ${fmt(d.media_final_exame)}`, max);
   const metas = el("div", { class: "metas" },
-    meta("Aprovação direta (sem exame)", r.aprovacao, classeMeta(r.aprovacao, max),
-      descricaoMeta(r.aprovacao, r, d.media_aprovacao)),
-    meta("Evitar reprovação direta (ir ao exame)", r.evitarReprovacao, classeMeta(r.evitarReprovacao, max),
-      descricaoMeta(r.evitarReprovacao, r, d.media_minima_exame)),
-    r.exame && meta("Nota no exame final", r.exame, classeMeta(r.exame, max),
-      `(média ${fmt2(r.mediaFinal)} + exame) ÷ 2 ≥ ${fmt(d.media_final_exame)}`)
-  );
+    metaExame ? [metaExame, metaEvitar, metaAprov] : emExame ? [metaEvitar, metaAprov] : [metaAprov, metaEvitar]);
 
   area.replaceChildren(...[
     sim ? el("p", { class: "rotulo-sim" }, icone(ICONES.frasco, 14), "Resultado simulado") : null,
     el("div", { class: `faixa faixa-${tom}` },
-      el("span", { class: "faixa-icone", "aria-hidden": "true" }, emoji),
-      el("div", {}, el("h2", {}, titulo), el("p", {}, texto))
+      el("span", { class: "faixa-icone", "aria-hidden": "true" }, icone(ICONES[iconeFaixa] || ICONES.info, 24)),
+      el("div", { class: "faixa-texto" }, el("h2", {}, titulo), el("p", {}, texto))
     ),
-    metricas,
-    r.restantes > 0 || r.exame ? metas : null
+    r.restantes > 0 || r.exame ? metas : null,
+    el("section", { class: "cartao painel-media", "aria-labelledby": "titulo-painel-media" },
+      el("div", { class: "secao-cabecalho" },
+        el("h2", { id: "titulo-painel-media", class: "titulo-secao" }, "Resumo da média"),
+        el("span", { class: "contagem" }, `Escala 0–${fmt(max)}`)),
+      metricas,
+      regua(d, r)
+    )
   ].filter(Boolean));
   anunciarDepois(`${sim ? "Simulação: " : ""}${titulo}. ${texto}`);
+
+  // Selo de situação ao lado do título e contagem de notas (acompanham a digitação)
+  const seloPagina = $("#selo-pagina");
+  if (seloPagina) {
+    seloPagina.replaceChildren(seloSituacao(r.situacao));
+    seloPagina.classList.toggle("selo-simulado", sim);
+    seloPagina.title = sim ? "Situação simulada" : "";
+  }
+  const contagem = $("#contagem-notas");
+  if (contagem) contagem.textContent = `${d.avaliacoes.length - r.restantes}/${d.avaliacoes.length} com nota`;
 
   // Placeholders nos campos vazios = nota mínima para aprovação direta
   const ph = r.aprovacao?.status === "possivel" ? `mín. ${fmt2(r.aprovacao.nota)}`
@@ -604,6 +687,39 @@ function atualizarResumo(d, r) {
   for (const input of $$("#detalhe .entrada-nota")) input.placeholder = ph;
 
   renderTipos(d, r);
+}
+
+/** Régua 0–máx: zonas de reprovação/exame/aprovação, faixa possível da média final e média parcial. */
+function regua(d, r) {
+  const max = d.nota_maxima;
+  const ex = pctEscala(d.media_minima_exame, max);
+  const ap = pctEscala(d.media_aprovacao, max);
+  const ini = pctEscala(r.pontosGarantidos, max);
+  const fim = pctEscala(r.mediaMaxima, max);
+  const atual = r.mediaFinal ?? r.mediaParcial;
+  const descricao = r.restantes === 0
+    ? `Média final ${fmt2(r.mediaFinal)}.`
+    : `A média final vai ficar entre ${fmt2(r.pontosGarantidos)} e ${fmt2(r.mediaMaxima)}.`;
+  return el("div", { class: "regua-bloco" },
+    el("p", { class: "regua-titulo" }, el("strong", {}, "Onde sua média pode terminar"), el("span", { class: "texto-2" }, ` · ${descricao}`)),
+    el("div", { class: "regua", role: "img",
+      style: `--ex:${ex}%;--ap:${ap}%;--ini:${ini}%;--fim:${fim}%;--atual:${atual === null ? 0 : pctEscala(atual, max)}%`,
+      "aria-label": `${descricao} Exame a partir de ${fmt(d.media_minima_exame)}; aprovação direta a partir de ${fmt(d.media_aprovacao)}.` },
+      el("span", { class: "rz rz-perigo" }), el("span", { class: "rz rz-alerta" }), el("span", { class: "rz rz-ok" }),
+      el("span", { class: "regua-faixa" }),
+      atual === null ? null : el("span", { class: "regua-marca" })),
+    el("div", { class: "regua-escala", "aria-hidden": "true", style: `--ex:${ex}%;--ap:${ap}%` },
+      el("span", { class: "re-zero" }, "0"),
+      el("span", { class: "re-exame" }, `Exame ${fmt(d.media_minima_exame)}`),
+      el("span", { class: "re-aprov" }, `Aprovação ${fmt(d.media_aprovacao)}`),
+      el("span", { class: "re-max" }, fmt(max))),
+    el("ul", { class: "regua-legenda", "aria-hidden": "true" },
+      el("li", {}, el("span", { class: "leg-faixa" }), r.restantes === 0 ? "Média final" : "Faixa possível"),
+      atual === null ? null : el("li", {}, el("span", { class: "leg-marca" }), r.mediaFinal !== null ? `Média ${fmt2(atual)}` : `Média parcial ${fmt2(atual)}`),
+      el("li", {}, el("span", { class: "leg-zona leg-zona-perigo" }), "Reprovação"),
+      el("li", {}, el("span", { class: "leg-zona leg-zona-alerta" }), "Exame"),
+      el("li", {}, el("span", { class: "leg-zona leg-zona-ok" }), "Aprovação direta"))
+  );
 }
 
 function descricaoMeta(m, r, alvo) {
@@ -625,10 +741,16 @@ function metrica(rotulo, valor, dica) {
   );
 }
 
-function meta(titulo, m, classe, texto) {
+function meta(titulo, m, classe, texto, max) {
+  const numerico = m && m.status !== "garantido" && m.status !== "impossivel";
+  const iconeValor = m?.status === "garantido" ? ICONES.checkCirculo : m?.status === "impossivel" ? ICONES.xCirculo : null;
   return el("div", { class: `meta ${classe}` },
-    el("div", { class: "meta-titulo" }, titulo),
-    el("div", { class: "meta-valor" }, valorMeta(m)),
+    el("div", { class: "meta-topo" },
+      el("div", { class: "meta-titulo" }, titulo),
+      numerico ? el("span", { class: "meta-tag" }, ROTULO_META[classe.split(" ")[0]] || "") : null),
+    el("div", { class: "meta-valor" },
+      iconeValor ? [icone(iconeValor, 32), el("span", { class: "meta-valor-texto" }, ROTULO_META[m.status])] : el("span", {}, valorMeta(m)),
+      numerico ? el("span", { class: "meta-escala" }, `/ ${fmt(max)}`) : null),
     el("p", { class: "meta-texto" }, texto)
   );
 }
@@ -640,13 +762,17 @@ function renderTipos(d, r) {
     const pt = r.porTipo[t];
     const pct = pt.media === null ? 0 : (pt.media / d.nota_maxima) * 100;
     return el("div", { class: "tipo-linha" },
-      el("span", {}, el("span", { class: `tipo tipo-${t}` }, TIPO_LABEL[t])),
-      el("div", { class: "barra", role: "img", "aria-label": `${TIPO_LABEL[t]}: média ${pt.media === null ? "sem notas" : fmt2(pt.media)}` },
-        el("span", { style: `width:${pct}%;background:var(--cor-${t})` })),
-      el("span", { class: "num" }, `${pt.media === null ? "—" : fmt2(pt.media)} · ${fmt(pt.percentual, 0)}% da média`)
+      el("div", { class: "tipo-linha-topo" },
+        el("span", { class: `tipo tipo-${t}` }, TIPO_LABEL[t]),
+        el("span", { class: "num tipo-media" }, pt.media === null ? "—" : fmt2(pt.media))),
+      el("div", { class: "barra barra-grossa", role: "img", "aria-label": `${TIPO_LABEL[t]}: média ${pt.media === null ? "sem notas" : fmt2(pt.media)}` },
+        el("span", { class: `seg-tipo-${t}`, style: `width:${pct}%` })),
+      el("span", { class: "tipo-peso" }, `${fmt(pt.percentual, 0)}% da média final`)
     );
   });
-  area.replaceChildren(el("h2", { class: "titulo-secao" }, "Desempenho por tipo"), el("div", { class: "tipos" }, linhas));
+  area.replaceChildren(
+    el("div", { class: "secao-cabecalho" }, el("h2", { class: "titulo-secao" }, "Desempenho por tipo")),
+    el("div", { class: "tipos" }, linhas));
 }
 
 // ---------- Excluir disciplina ----------
@@ -700,7 +826,7 @@ function linhaAvaliacao(a = {}) {
         linha.remove();
         atualizarDistribuicao();
         ($(".btn-remover", vizinha || document.createElement("div")) || $("[data-add]")).focus();
-      } }, "×")
+      } }, icone(ICONES.lixeira, 16))
   );
 }
 
@@ -725,14 +851,14 @@ function atualizarDistribuicao() {
   }
   const barra = $("#editor-distribuicao");
   barra.replaceChildren(...TIPOS.filter((t) => porTipo[t] > 0).map((t) =>
-    el("span", { style: `width:${(porTipo[t] / total) * 100}%;background:var(--cor-${t})`, title: TIPO_LABEL[t] })));
+    el("span", { class: `seg-tipo-${t}`, style: `width:${(porTipo[t] / total) * 100}%`, title: TIPO_LABEL[t] })));
   let legenda = barra.nextElementSibling;
   if (!legenda?.classList.contains("distribuicao-legenda")) {
     legenda = el("div", { class: "distribuicao-legenda" });
     barra.after(legenda);
   }
   legenda.replaceChildren(...TIPOS.filter((t) => porTipo[t] > 0).map((t) =>
-    el("span", {}, el("span", { class: "ponto", style: `background:var(--cor-${t})` }),
+    el("span", {}, el("span", { class: `ponto ponto-tipo-${t}` }),
       ` ${TIPO_LABEL[t]} ${fmt((porTipo[t] / total) * 100, 1)}%`)));
 }
 

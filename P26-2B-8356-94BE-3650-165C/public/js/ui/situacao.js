@@ -1,7 +1,7 @@
 /**
  * situacao.js — textos e cores da situação de uma disciplina (compartilhado entre painéis).
  */
-import { el, fmt, fmt2 } from "./dom.js";
+import { el, fmt, fmt2, icone, ICONES } from "./dom.js";
 
 export const ROTULO_SITUACAO = {
   aprovado: "Aprovado(a)",
@@ -24,8 +24,18 @@ export const TOM_SITUACAO = {
 
 export const textoSituacao = (s) => ROTULO_SITUACAO[s] || "—";
 
+/** Ícone de cada tom (a situação nunca depende só da cor). */
+export const ICONE_TOM = {
+  ok: ICONES.checkCirculo,
+  info: ICONES.relogio,
+  alerta: ICONES.alerta,
+  perigo: ICONES.xCirculo,
+  neutro: ICONES.menos,
+};
+
 export function seloSituacao(s) {
-  return el("span", { class: `selo selo-${TOM_SITUACAO[s] || "neutro"}` }, textoSituacao(s));
+  const tom = TOM_SITUACAO[s] || "neutro";
+  return el("span", { class: `selo selo-${tom}` }, icone(ICONE_TOM[tom], 14), textoSituacao(s));
 }
 
 export const plural = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
